@@ -9,7 +9,4 @@ Thing I want included into the project:
 2. Enable automatic execution
     If a project is tagged "automatic open" <- can only be one
     Run the "daily workflow" automatically on windows start
-
-3. Daily workflow expansion
-    Only add a new file if there is no file existing for the current date
     
