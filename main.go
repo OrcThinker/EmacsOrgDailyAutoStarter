@@ -21,13 +21,14 @@ import (
 
 // --- Configuration Constants ---
 const (
-	DateFormat        = "2006-01-02"
-	FileExtension     = ".org"
-	SourceHeader      = "* For tomorrow"
-	DestinationHeader = "* TODO"
-	ConfigDirName     = "goday"
-	ConfigFileName    = "projects.json"
-	DaemonSpinUpTime  = 20
+	DateFormat          = "2006-01-02"
+	FileExtension       = ".org"
+	SourceHeader        = "* For tomorrow"
+	DestinationHeader   = "* TODO"
+	ConfigDirName       = "goday"
+	ConfigFileName      = "projects.json"
+	DaemonSpinUpTime    = 20
+	DaemonOpenRetryTime = 5
 )
 
 // --- Styles (Lipgloss) ---
@@ -395,15 +396,20 @@ func runDailyWorkflow(projectPath string, m *model) {
 	todayPath := filepath.Join(projectPath, todayFilename)
 
 	createDailyNote(todayPath, yesterdayPath, m)
-	for i := 0; i <= 10 && !m.daemonSpunUp; i++ {
-		fmt.Printf("Waiting for deamon to spin up...")
-		time.Sleep(time.Second)
-		if i == 10 {
-			fmt.Printf("Daemon has not spun up :(, press T to retry")
-			return
-		}
+	// for i := 0; i <= 10 && !m.daemonSpunUp; i++ {
+	// 	fmt.Printf("Waiting for deamon to spin up...")
+	// 	time.Sleep(time.Second)
+	// 	if i == 10 {
+	// 		fmt.Printf("Daemon has not spun up :(, press T to retry")
+	// 		return
+	// 	}
+	// }
+	emacsHasOpened := openEmacs(projectPath)
+	for i := 0; !emacsHasOpened && i < 4; i++ {
+		time.Sleep(time.Second * DaemonOpenRetryTime)
+		emacsHasOpened = openEmacs(projectPath)
 	}
-	openEmacs(projectPath)
+	m.daemonSpunUp = true
 }
 
 // Could return true if new file was created -> then saveConfig only when was created but need to update LastOpened anyway so left it for now
@@ -470,13 +476,18 @@ func extractSection(filename, targetHeader string) []string {
 	return lines
 }
 
-func openEmacs(path string) {
+func openEmacs(path string) bool {
 	// callArgs := fmt.Sprintf("-r '%s'", path)
-	cmd := exec.Command("emacsclient", "-r", `-a "emacs"`, path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Run()
+	// cmd := exec.Command("emacsclient", "-r", `-a "emacs"`, path)
+	cmd := exec.Command("emacsclient", "-r", path)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	err := cmd.Run()
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // Tried reading console output from cmd.Stdout by passing a buffer but failed at it
