@@ -130,7 +130,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case DaemonReadyMsg:
-		fmt.Printf("daemon ready")
 		m.daemonSpunUp = true
 		return m, nil
 
@@ -199,9 +198,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.selectedPath != "" {
 					//Could do save outside and sync them but not needed prolly
 					//Honestly this is kinda problematic as it will only save config once emacs is closed
-					go func(m model) {
+					return m, func() tea.Msg {
 						runDailyWorkflow(m.selectedPath, &m)
-					}(m)
+						return DaemonReadyMsg{}
+					}
 				}
 				// return m, tea.Quit
 			}
@@ -409,7 +409,6 @@ func runDailyWorkflow(projectPath string, m *model) {
 		time.Sleep(time.Second * DaemonOpenRetryTime)
 		emacsHasOpened = openEmacs(projectPath)
 	}
-	m.daemonSpunUp = true
 }
 
 // Could return true if new file was created -> then saveConfig only when was created but need to update LastOpened anyway so left it for now
