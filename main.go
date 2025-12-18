@@ -27,12 +27,14 @@ const (
 	DestinationHeader = "* TODO"
 	ConfigDirName     = "goday"
 	ConfigFileName    = "projects.json"
+	DaemonSpinUpTime  = 20
 )
 
 // --- Styles (Lipgloss) ---
 var (
 	// Colors
-	subtle    = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
+	normal    = lipgloss.AdaptiveColor{Light: "#EEE", Dark: "#222"}
+	subtle    = lipgloss.AdaptiveColor{Light: "#a3a59dff", Dark: "#383838"}
 	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 	warning   = lipgloss.AdaptiveColor{Light: "#F25D94", Dark: "#F55385"}
@@ -66,6 +68,10 @@ var (
 	//I could aslo create a "selectedStartStyle" to have it more cojoined with selected
 	//Then I'd need non-starred selected and starred selected separetely
 	starStyle = lipgloss.NewStyle().Foreground(gold)
+
+	normalStyle  = lipgloss.NewStyle().Foreground(normal)
+	successStyle = lipgloss.NewStyle().Foreground(special)
+	failureStyle = lipgloss.NewStyle().Foreground(warning)
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(subtle).
@@ -111,7 +117,8 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Tick(time.Second*30, func(t time.Time) tea.Msg {
+	lipgloss.SetHasDarkBackground(false)
+	return tea.Tick(time.Second*DaemonSpinUpTime, func(t time.Time) tea.Msg {
 		return DaemonReadyMsg{}
 	})
 }
@@ -122,6 +129,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case DaemonReadyMsg:
+		fmt.Printf("daemon ready")
 		m.daemonSpunUp = true
 		return m, nil
 
@@ -201,7 +209,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				// This code runs in a separate goroutine managed by Bubble Tea
 				runEmacsDaemon()
-				time.Sleep(time.Second * 30)
+				time.Sleep(time.Second * DaemonSpinUpTime)
 				return DaemonReadyMsg{}
 			}
 		}
@@ -263,7 +271,18 @@ func (m model) View() string {
 		s += row + "\n"
 	}
 
-	// 5. Help Footer
+	s += "\n\n"
+
+	// 5. Daemon status
+	daemonInfo := normalStyle.Render("DAEMON status: ")
+	//This may be a bit more taxing on perfomancec
+	daemonStatus := failureStyle.Render("OFFLINE")
+	if m.daemonSpunUp {
+		daemonStatus = successStyle.Render("ONLINE")
+	}
+	s += lipgloss.JoinHorizontal(lipgloss.Left, daemonInfo, daemonStatus)
+
+	// 6. Help Footer
 	helpStr := "a: add • s: star • d: delete • enter: open • q: quit"
 	s += helpStyle.Render(helpStr)
 
