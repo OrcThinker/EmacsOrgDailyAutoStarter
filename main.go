@@ -89,7 +89,10 @@ type model struct {
 	textInput     textinput.Model
 	selectedPath  string
 	width, height int
+	daemonSpunUp  bool
 }
+
+type DaemonReadyMsg struct{}
 
 func initialModel() model {
 	ti := textinput.New()
@@ -108,7 +111,9 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Tick(time.Second*30, func(t time.Time) tea.Msg {
+		return DaemonReadyMsg{}
+	})
 }
 
 // --- Update Loop ---
@@ -116,6 +121,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case DaemonReadyMsg:
+		m.daemonSpunUp = true
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -187,6 +196,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// return m, tea.Quit
 			}
+		//For testing functions
+		case "t":
+			return m, func() tea.Msg {
+				// This code runs in a separate goroutine managed by Bubble Tea
+				runEmacsDaemon()
+				time.Sleep(time.Second * 30)
+				return DaemonReadyMsg{}
+			}
 		}
 	}
 	return m, cmd
@@ -254,6 +271,11 @@ func (m model) View() string {
 }
 
 func main() {
+	//Run deamon in the background
+	go func() {
+		runEmacsDaemon()
+	}()
+
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
 	_, err := p.Run()
@@ -354,6 +376,14 @@ func runDailyWorkflow(projectPath string, m *model) {
 	todayPath := filepath.Join(projectPath, todayFilename)
 
 	createDailyNote(todayPath, yesterdayPath, m)
+	for i := 0; i <= 10 && !m.daemonSpunUp; i++ {
+		fmt.Printf("Waiting for deamon to spin up...")
+		time.Sleep(time.Second)
+		if i == 10 {
+			fmt.Printf("Daemon has not spun up :(, press T to retry")
+			return
+		}
+	}
 	openEmacs(projectPath)
 }
 
@@ -422,9 +452,27 @@ func extractSection(filename, targetHeader string) []string {
 }
 
 func openEmacs(path string) {
-	cmd := exec.Command("emacs", path)
+	// callArgs := fmt.Sprintf("-r '%s'", path)
+	cmd := exec.Command("emacsclient", "-r", `-a "emacs"`, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+
+// Tried reading console output from cmd.Stdout by passing a buffer but failed at it
+// For now I'll just have a set amount of time to wait for daemon to run
+func runEmacsDaemon() {
+	cmd := exec.Command("emacs", "--daemon")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Run()
+}
+
+func cmdSetupAndRun(cmd *exec.Cmd) {
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 	cmd.Run()
 }

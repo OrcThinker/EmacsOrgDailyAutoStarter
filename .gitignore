@@ -10,3 +10,4 @@ vendor/
 .vscode/
 NewPath/
 path2/
+launch.json
