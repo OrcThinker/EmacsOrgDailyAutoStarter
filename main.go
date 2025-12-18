@@ -30,6 +30,7 @@ const (
 	DaemonSpinUpTime    = 20
 	DaemonOpenRetryTime = 5
 	DoomLoadedMsg       = "Doom loaded "
+	SuccessMsg          = "Success"
 )
 
 // --- Styles (Lipgloss) ---
@@ -101,6 +102,7 @@ type model struct {
 }
 
 type DaemonReadyMsg struct{}
+type StartDaemonMsg struct{}
 
 func initialModel() model {
 	ti := textinput.New()
@@ -120,9 +122,9 @@ func initialModel() model {
 
 func (m model) Init() tea.Cmd {
 	lipgloss.SetHasDarkBackground(false)
-	return tea.Tick(time.Second*DaemonSpinUpTime, func(t time.Time) tea.Msg {
-		return DaemonReadyMsg{}
-	})
+	return func() tea.Msg {
+		return StartDaemonMsg{}
+	}
 }
 
 // --- Update Loop ---
@@ -130,6 +132,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+
+	case StartDaemonMsg:
+		return m, func() tea.Msg {
+			fmt.Println("xd")
+			ch := make(chan string)
+			go func() {
+				runEmacsDaemon(ch)
+			}()
+			emacsRunResult := <-ch
+			if emacsRunResult == SuccessMsg {
+				return DaemonReadyMsg{}
+			}
+			return nil
+		}
+
 	case DaemonReadyMsg:
 		m.daemonSpunUp = true
 		return m, nil
@@ -209,10 +226,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		//For testing functions
 		case "t":
 			return m, func() tea.Msg {
-				// This code runs in a separate goroutine managed by Bubble Tea
-				runEmacsDaemon()
-				time.Sleep(time.Second * DaemonSpinUpTime)
-				return DaemonReadyMsg{}
+				return StartDaemonMsg{}
 			}
 		}
 	}
@@ -293,9 +307,6 @@ func (m model) View() string {
 
 func main() {
 	//Run deamon in the background
-	// go func() {
-	// 	runEmacsDaemon()
-	// }()
 
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
@@ -492,7 +503,7 @@ func openEmacs(path string) bool {
 
 // Tried reading console output from cmd.Stdout by passing a buffer but failed at it
 // For now I'll just have a set amount of time to wait for daemon to run
-func runEmacsDaemon() {
+func runEmacsDaemon(returnChan chan<- string) {
 	file, err := os.Create("C:\\Users\\Ramand\\Desktop\\goTerminal\\firstApp\\output.log")
 	if err != nil {
 		panic(err)
@@ -508,12 +519,8 @@ func runEmacsDaemon() {
 		line := scanner.Text()
 
 		if strings.Contains(line, DoomLoadedMsg) {
-			//here return msg ???
+			returnChan <- SuccessMsg
 		}
-
-		// if _, err := file.WriteString(line + "\n"); err != nil {
-		// 	fmt.Println("Error writing to file:", err)
-		// }
 	}
 
 	cmd.Wait()
