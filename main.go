@@ -29,6 +29,7 @@ const (
 	ConfigFileName      = "projects.json"
 	DaemonSpinUpTime    = 20
 	DaemonOpenRetryTime = 5
+	DoomLoadedMsg       = "Doom loaded "
 )
 
 // --- Styles (Lipgloss) ---
@@ -292,9 +293,9 @@ func (m model) View() string {
 
 func main() {
 	//Run deamon in the background
-	go func() {
-		runEmacsDaemon()
-	}()
+	// go func() {
+	// 	runEmacsDaemon()
+	// }()
 
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
@@ -492,12 +493,39 @@ func openEmacs(path string) bool {
 // Tried reading console output from cmd.Stdout by passing a buffer but failed at it
 // For now I'll just have a set amount of time to wait for daemon to run
 func runEmacsDaemon() {
+	file, err := os.Create("C:\\Users\\Ramand\\Desktop\\goTerminal\\firstApp\\output.log")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
 	cmd := exec.Command("emacs", "--daemon")
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Run()
+	stderr, _ := cmd.StderrPipe()
+
+	cmd.Start()
+
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.Contains(line, DoomLoadedMsg) {
+			//here return msg ???
+		}
+
+		// if _, err := file.WriteString(line + "\n"); err != nil {
+		// 	fmt.Println("Error writing to file:", err)
+		// }
+	}
+
+	cmd.Wait()
 }
+
+// func runEmacsDaemon() {
+// 	cmd := exec.Command("emacs", "--daemon")
+// 	cmd.Stdin = nil
+// 	cmd.Stdout = nil
+// 	cmd.Stderr = nil
+// 	cmd.Run()
+// }
 
 func cmdSetupAndRun(cmd *exec.Cmd) {
 	cmd.Stdin = nil
