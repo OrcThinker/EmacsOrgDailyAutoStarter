@@ -2,8 +2,8 @@ Golang Emacs Day Manager Auto Open development plan:
 
 Thing I want included into the project:
 1. Run Emacs on daemon and single instance
-    If Emacs daemon in running open emacs 
-    If Emacs is running open in the current
+    If Emacs daemon in running open emacs  [done]
+    If Emacs is running open in the current [done]
     App opens the todays .org file and possibly yesterdays too for comparison
 
 2. Enable automatic execution

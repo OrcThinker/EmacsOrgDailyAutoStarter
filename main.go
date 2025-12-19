@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -83,11 +84,12 @@ var (
 
 // --- Data Models ---
 type Project struct {
-	Name            string    `json:"name"`
-	Path            string    `json:"path"`
-	Starred         bool      `json:"starred"`
-	LastOpened      time.Time `json:"last_opened"`
-	LastFileCreated string    `json:"last_file_created"`
+	Name                string    `json:"name"`
+	Path                string    `json:"path"`
+	Starred             bool      `json:"starred"`
+	LastOpened          time.Time `json:"last_opened"`
+	LastFileCreated     string    `json:"last_file_created"`
+	PreviousFileCreated string    `json:"previous_file_created"`
 }
 
 // --- Bubble Tea Model ---
@@ -416,10 +418,10 @@ func runDailyWorkflow(projectPath string, m *model) {
 	// 		return
 	// 	}
 	// }
-	emacsHasOpened := openEmacs(projectPath)
+	emacsHasOpened := openEmacs(todayPath, yesterdayPath)
 	for i := 0; !emacsHasOpened && i < 4; i++ {
 		time.Sleep(time.Second * DaemonOpenRetryTime)
-		emacsHasOpened = openEmacs(projectPath)
+		emacsHasOpened = openEmacs(todayPath, yesterdayPath)
 	}
 }
 
@@ -457,6 +459,7 @@ func createDailyNote(todayFile, yesterdayFile string, m *model) {
 	//The mini problem with defers in go is that you can't defer assignments
 	//And it makes it so that the code is not read from Top to Bottom
 	f.Close()
+	m.projects[m.cursor].PreviousFileCreated = m.projects[m.cursor].LastFileCreated
 	m.projects[m.cursor].LastFileCreated = todayFile
 	saveConfig(m.projects)
 }
@@ -487,13 +490,23 @@ func extractSection(filename, targetHeader string) []string {
 	return lines
 }
 
-func openEmacs(path string) bool {
-	// callArgs := fmt.Sprintf("-r '%s'", path)
-	// cmd := exec.Command("emacsclient", "-r", `-a "emacs"`, path)
-	cmd := exec.Command("emacsclient", "-r", path)
+func openEmacs(currentFilePath, previousFilePath string) bool {
+	cmd := exec.Command("emacsclient", "-r", currentFilePath)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	go func() {
+		time.Sleep(time.Second / 10) // to ensure it runs after blocking cmd.Run() below
+
+		cmd3 := exec.Command("emacsclient")
+		cmd3.SysProcAttr = &syscall.SysProcAttr{
+			CmdLine: `emacsclient -n -r --eval "(progn (delete-other-windows) (find-file \"C:/Users/Ramand/Desktop/goTerminal/firstApp/NewPath/2025-12-19.org\") (split-window-right) (find-file \"C:/Users/Ramand/Desktop/goTerminal/firstApp/NewPath/2025-12-19.org\"))"`,
+		}
+		err := cmd3.Run()
+		if err != nil {
+			return
+		}
+	}()
 	err := cmd.Run()
 	if err != nil {
 		return false
