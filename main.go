@@ -104,7 +104,9 @@ type model struct {
 }
 
 type DaemonReadyMsg struct{}
-type FinishedDailynoteWorkflowMsg struct{}
+type FinishedDailynoteWorkflowMsg struct {
+	project Project
+}
 type StartDaemonMsg struct{}
 
 func initialModel() model {
@@ -156,7 +158,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case FinishedDailynoteWorkflowMsg:
 		m.projects = loadConfig()
-		m.cursor = 0
+		for i, proj := range m.projects {
+			if proj.Path == msg.project.Path {
+				m.cursor = i
+			}
+		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -222,7 +228,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					//Honestly this is kinda problematic as it will only save config once emacs is closed
 					return m, func() tea.Msg {
 						runDailyWorkflow(m.selectedPath, &m)
-						return FinishedDailynoteWorkflowMsg{}
+						return FinishedDailynoteWorkflowMsg{m.projects[m.cursor]}
 					}
 				}
 			}
