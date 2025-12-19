@@ -212,8 +212,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if len(m.projects) > 0 {
 				m.projects[m.cursor].LastOpened = time.Now()
-				m.sortProjects()
-				saveConfig(m.projects)
 				m.selectedPath = m.projects[m.cursor].Path
 				if m.selectedPath != "" {
 					//Could do save outside and sync them but not needed prolly
@@ -223,6 +221,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return DaemonReadyMsg{}
 					}
 				}
+				m.sortProjects()
+				saveConfig(m.projects)
 				// return m, tea.Quit
 			}
 		//For testing functions
@@ -410,18 +410,11 @@ func runDailyWorkflow(projectPath string, m *model) {
 	todayPath := filepath.Join(projectPath, todayFilename)
 
 	createDailyNote(todayPath, yesterdayPath, m)
-	// for i := 0; i <= 10 && !m.daemonSpunUp; i++ {
-	// 	fmt.Printf("Waiting for deamon to spin up...")
-	// 	time.Sleep(time.Second)
-	// 	if i == 10 {
-	// 		fmt.Printf("Daemon has not spun up :(, press T to retry")
-	// 		return
-	// 	}
-	// }
-	emacsHasOpened := openEmacs(todayPath, yesterdayPath)
+	//This has 1 fault, if the list positions change
+	emacsHasOpened := openEmacs(m.projects[m.cursor].LastFileCreated, m.projects[m.cursor].PreviousFileCreated)
 	for i := 0; !emacsHasOpened && i < 4; i++ {
 		time.Sleep(time.Second * DaemonOpenRetryTime)
-		emacsHasOpened = openEmacs(todayPath, yesterdayPath)
+		emacsHasOpened = openEmacs(m.projects[m.cursor].LastFileCreated, m.projects[m.cursor].PreviousFileCreated)
 	}
 }
 
@@ -499,8 +492,9 @@ func openEmacs(currentFilePath, previousFilePath string) bool {
 		time.Sleep(time.Second / 10) // to ensure it runs after blocking cmd.Run() below
 
 		cmd3 := exec.Command("emacsclient")
+		splitOpenEmacsCmd := fmt.Sprintf(`emacsclient -n -r --eval "(progn (delete-other-windows) (find-file \"%s\") (split-window-right) (find-file \"%s\"))"`, filepath.ToSlash(previousFilePath), filepath.ToSlash(currentFilePath))
 		cmd3.SysProcAttr = &syscall.SysProcAttr{
-			CmdLine: `emacsclient -n -r --eval "(progn (delete-other-windows) (find-file \"C:/Users/Ramand/Desktop/goTerminal/firstApp/NewPath/2025-12-19.org\") (split-window-right) (find-file \"C:/Users/Ramand/Desktop/goTerminal/firstApp/NewPath/2025-12-19.org\"))"`,
+			CmdLine: splitOpenEmacsCmd,
 		}
 		err := cmd3.Run()
 		if err != nil {
