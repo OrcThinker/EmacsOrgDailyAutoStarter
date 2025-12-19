@@ -227,8 +227,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					//Could do save outside and sync them but not needed prolly
 					//Honestly this is kinda problematic as it will only save config once emacs is closed
 					return m, func() tea.Msg {
+						targetProj := m.projects[m.cursor]
 						runDailyWorkflow(m.selectedPath, &m)
-						return FinishedDailynoteWorkflowMsg{m.projects[m.cursor]}
+						return FinishedDailynoteWorkflowMsg{targetProj}
 					}
 				}
 			}
