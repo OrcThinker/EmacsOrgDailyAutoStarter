@@ -104,6 +104,7 @@ type model struct {
 }
 
 type DaemonReadyMsg struct{}
+type FinishedDailynoteWorkflowMsg struct{}
 type StartDaemonMsg struct{}
 
 func initialModel() model {
@@ -152,6 +153,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DaemonReadyMsg:
 		m.daemonSpunUp = true
 		return m, nil
+
+	case FinishedDailynoteWorkflowMsg:
+		m.projects = loadConfig()
+		m.cursor = 0
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -211,19 +216,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			if len(m.projects) > 0 {
-				m.projects[m.cursor].LastOpened = time.Now()
 				m.selectedPath = m.projects[m.cursor].Path
 				if m.selectedPath != "" {
 					//Could do save outside and sync them but not needed prolly
 					//Honestly this is kinda problematic as it will only save config once emacs is closed
 					return m, func() tea.Msg {
 						runDailyWorkflow(m.selectedPath, &m)
-						return DaemonReadyMsg{}
+						return FinishedDailynoteWorkflowMsg{}
 					}
 				}
-				m.sortProjects()
-				saveConfig(m.projects)
-				// return m, tea.Quit
 			}
 		//For testing functions
 		case "t":
@@ -410,12 +411,19 @@ func runDailyWorkflow(projectPath string, m *model) {
 	todayPath := filepath.Join(projectPath, todayFilename)
 
 	createDailyNote(todayPath, yesterdayPath, m)
-	//This has 1 fault, if the list positions change
-	emacsHasOpened := openEmacs(m.projects[m.cursor].LastFileCreated, m.projects[m.cursor].PreviousFileCreated)
-	for i := 0; !emacsHasOpened && i < 4; i++ {
-		time.Sleep(time.Second * DaemonOpenRetryTime)
-		emacsHasOpened = openEmacs(m.projects[m.cursor].LastFileCreated, m.projects[m.cursor].PreviousFileCreated)
-	}
+	//Problem with this approach is that it only saves and the ELM arch model stays the same in the main thread
+	//Would need to implement message to struct, if not nil reread config I guess :(
+	copyOfTargetProj := m.projects[m.cursor]
+	m.projects[m.cursor].LastOpened = time.Now()
+	m.sortProjects()
+	saveConfig(m.projects)
+	go func() {
+		emacsHasOpened := openEmacs(copyOfTargetProj.LastFileCreated, copyOfTargetProj.PreviousFileCreated)
+		for i := 0; !emacsHasOpened && i < 4; i++ {
+			time.Sleep(time.Second * DaemonOpenRetryTime)
+			emacsHasOpened = openEmacs(copyOfTargetProj.LastFileCreated, copyOfTargetProj.PreviousFileCreated)
+		}
+	}()
 }
 
 // Could return true if new file was created -> then saveConfig only when was created but need to update LastOpened anyway so left it for now
@@ -454,7 +462,7 @@ func createDailyNote(todayFile, yesterdayFile string, m *model) {
 	f.Close()
 	m.projects[m.cursor].PreviousFileCreated = m.projects[m.cursor].LastFileCreated
 	m.projects[m.cursor].LastFileCreated = todayFile
-	saveConfig(m.projects)
+
 }
 
 func extractSection(filename, targetHeader string) []string {
