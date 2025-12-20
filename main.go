@@ -87,6 +87,7 @@ type Project struct {
 	Name                string    `json:"name"`
 	Path                string    `json:"path"`
 	Starred             bool      `json:"starred"`
+	AutomaticStart      bool      `json:"automatic_start"`
 	LastOpened          time.Time `json:"last_opened"`
 	LastFileCreated     string    `json:"last_file_created"`
 	PreviousFileCreated string    `json:"previous_file_created"`
@@ -94,13 +95,14 @@ type Project struct {
 
 // --- Bubble Tea Model ---
 type model struct {
-	projects      []Project
-	cursor        int
-	addingNew     bool
-	textInput     textinput.Model
-	selectedPath  string
-	width, height int
-	daemonSpunUp  bool
+	projects         []Project
+	cursor           int
+	addingNew        bool
+	textInput        textinput.Model
+	selectedPath     string
+	width, height    int
+	daemonSpunUp     bool
+	autostartProject Project
 }
 
 type DaemonReadyMsg struct{}
@@ -118,11 +120,21 @@ func initialModel() model {
 	// Style the input prompt
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(highlight)
 
-	return model{
+	m := model{
 		projects:  loadConfig(),
 		textInput: ti,
 		cursor:    0,
 	}
+
+	//Foreach project in model if autostart then start it up and break
+	//Also tag it as automatic in the model
+	for _, val := range m.projects {
+		if val.AutomaticStart {
+			m.autostartProject = val
+			break
+		}
+	}
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -238,6 +250,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				return StartDaemonMsg{}
 			}
+		case "f":
+			if len(m.projects) > 0 {
+				//This has to change to which one is automatic. UnAuto the other one
+				m.projects[m.cursor].AutomaticStart = !m.projects[m.cursor].AutomaticStart
+				if m.projects[m.cursor].AutomaticStart {
+					for i, val := range m.projects {
+						if val.Path == m.autostartProject.Path {
+							m.projects[i].AutomaticStart = false
+						}
+					}
+					m.autostartProject = m.projects[m.cursor]
+				} else {
+					m.autostartProject = Project{}
+				}
+				m.sortProjects()
+				saveConfig(m.projects)
+			}
 		}
 	}
 	return m, cmd
@@ -273,6 +302,11 @@ func (m model) View() string {
 			starIcon = starStyle.Render("★")
 		}
 
+		autoSign := " "
+		if p.AutomaticStart {
+			autoSign = starStyle.Render("AUTO")
+		}
+
 		// Base strings
 		nameStr := fmt.Sprintf("%s", p.Name)
 		// nameStr := fmt.Sprintf("%s %s", starIcon, p.Name)
@@ -284,14 +318,14 @@ func (m model) View() string {
 			// Apply selected style
 			nameRendered := selectedItemStyle.Render(nameStr)
 			pathRendered := pathStyle.Render(pathStr)
-			row = lipgloss.JoinHorizontal(lipgloss.Left, starIcon, nameRendered, pathRendered)
+			row = lipgloss.JoinHorizontal(lipgloss.Left, starIcon, autoSign, nameRendered, pathRendered)
 		} else {
 			// Apply unselected style
 			nameRendered := unselectedItemStyle.Render(nameStr)
 			// We hide path for unselected items to keep UI clean,
 			// or we can show it very dimly. Let's show it dimly.
 			pathRendered := pathStyle.Copy().Faint(true).Render(pathStr)
-			row = lipgloss.JoinHorizontal(lipgloss.Left, starIcon, nameRendered, pathRendered)
+			row = lipgloss.JoinHorizontal(lipgloss.Left, starIcon, autoSign, nameRendered, pathRendered)
 		}
 
 		s += row + "\n"
@@ -309,7 +343,7 @@ func (m model) View() string {
 	s += lipgloss.JoinHorizontal(lipgloss.Left, daemonInfo, daemonStatus)
 
 	// 6. Help Footer
-	helpStr := "a: add • s: star • d: delete • enter: open • q: quit"
+	helpStr := "a: add • s: star • d: delete • enter: open • q: quit • f: AutoStart"
 	s += helpStyle.Render(helpStr)
 
 	return docStyle.Render(s)
